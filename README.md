@@ -1,1 +1,3 @@
-Ibeacon base-app
+Ibeacon base application
+
+Insert useful comments here...
