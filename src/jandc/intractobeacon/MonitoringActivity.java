@@ -130,10 +130,10 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 
 				if (region.getUniqueId()
 						.equals(new String("intracto.entrance"))) {
-					text = " Welcome to intracto digital agency. There is free wifi! Login with essid 'ITR-Guest' and password 'intractointernet'";
+					text = " Welcome to intracto digital agency.";
 				} else if (region.getUniqueId().equals(
 						new String("intracto.thebox"))) {
-					text = " Welcome to team 'The Box'. This is where I was born";
+					text = " Welcome to team 'The Box'.";
 				}
 
 				logToDisplay(text);
