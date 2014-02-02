@@ -1,5 +1,6 @@
 package jandc.intractobeacon;
 
+import java.io.*;
 import java.lang.reflect.Constructor;
 import java.util.*;
 
@@ -9,9 +10,21 @@ import android.R.string;
 import android.os.*;
 import android.app.*;
 import android.content.*;
-import android.util.Log;
-import android.view.View;
+import android.util.*;
+import android.view.*;
 import android.widget.*;
+
+import java.sql.*;
+
+import org.apache.http.*;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class MonitoringActivity extends Activity implements IBeaconConsumer {
 
@@ -28,11 +41,59 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 		verifyBluetooth();
 		iBeaconManager.bind(this);
 
-		regions.add(new Region("intracto.entrance",
-				"e2 c5 6d b5 df fb 48 d2 b0 60 d0 f5 a7 10 96 e0", null, null));
-		regions.add(new Region("intracto.thebox",
-				"e2 c5 6d b5 df fb 48 d2 b0 60 d0 f5 a7 10 96 e1", null, null));
+		regions = fetchRegions();
+		/*
+		 * regions.add(new Region("intracto.entrance",
+		 * "e2 c5 6d b5 df fb 48 d2 b0 60 d0 f5 a7 10 96 e0", null, null));
+		 * regions.add(new Region("intracto.thebox",
+		 * "e2 c5 6d b5 df fb 48 d2 b0 60 d0 f5 a7 10 96 e1", null, null));
+		 */
 
+	}
+
+	private List<Region> fetchRegions() {
+		List<Region> fetchedRegions = new ArrayList<Region>();
+
+		String result = "";
+
+		// http post
+		try {
+			HttpClient httpclient = new DefaultHttpClient();
+			HttpPost httppost = new HttpPost("http://192.168.1.100/index.php");
+			HttpResponse response = httpclient.execute(httppost);
+
+			HttpEntity entity = response.getEntity();
+			InputStream is = entity.getContent();
+
+			// convert response to string
+			BufferedReader reader = new BufferedReader(new InputStreamReader(
+					is, "iso-8859-1"), 8);
+			StringBuilder sb = new StringBuilder();
+			String line = null;
+
+			while ((line = reader.readLine()) != null) {
+				sb.append(line + "\n");
+			}
+			is.close();
+
+			result = sb.toString();
+
+			// parse json data
+			JSONArray jArray = new JSONArray(result);
+			for (int i = 0; i < jArray.length(); i++) {
+				JSONObject json_data = jArray.getJSONObject(i);
+
+				fetchedRegions.add(new Region(json_data.getString("uniqueId"),
+						json_data.getString("UUID"), json_data.getInt("major"),
+						json_data.getInt("minor")));
+			}
+		} catch (Exception e) {
+			logToDisplay(e.getMessage());
+		}
+
+		// Toast.makeText(getApplicationContext(),"There are " +
+		// fetchedRegions.size() + " of them",Toast.LENGTH_LONG).show();
+		return fetchedRegions;
 	}
 
 	public void onRangingClicked(View view) {
@@ -122,7 +183,6 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 
 		iBeaconManager.setMonitorNotifier(new MonitorNotifier() {
 
-			
 			@Override
 			public void didEnterRegion(Region region) {
 				String text = "Just entered :";
@@ -150,27 +210,6 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 			}
 		});
 
-		/*
-		 * iBeaconManager.setRangeNotifier(new RangeNotifier() {
-		 * 
-		 * @Override public void didRangeBeaconsInRegion(Collection<IBeacon>
-		 * iBeacons, Region region) { ArrayList<Accuracies> accuracies = new
-		 * ArrayList<MonitoringActivity.Accuracies>(); for (IBeacon iBeacon :
-		 * iBeacons) { Accuracies acc = new Accuracies(); acc.accuracy =
-		 * iBeacon.getAccuracy(); acc.uuid = iBeacon.getProximityUuid();
-		 * accuracies.add(acc); } Collections.sort(accuracies); String text= "";
-		 * for (Region region_line : regions) { if
-		 * (region_line.getProximityUuid().equals(accuracies.get(0).uuid)) { if
-		 * (region_line.getUniqueId().equals( new String("intracto.entrance")))
-		 * { text =
-		 * " Welcome to intracto digital agency. There is free wifi! Login with essid 'ITR-Guest' and password 'intractointernet'"
-		 * ; } else if (region_line.getUniqueId().equals( new
-		 * String("intracto.thebox"))) { text =
-		 * " Welcome to team 'The Box'. This is where I was born"; } } }
-		 * logToDisplay(text);
-		 * 
-		 * } });
-		 */
 		try {
 			for (Region region_line : regions) {
 				iBeaconManager.startMonitoringBeaconsInRegion(region_line);
