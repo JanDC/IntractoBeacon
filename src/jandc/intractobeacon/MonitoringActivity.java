@@ -90,19 +90,26 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 			os.write(result);
 			os.close();
 
-		} catch (Exception e) {
+		} catch (Exception e1) {
 			try {
-				logToDisplay(e.toString());
 				InputStream instream = openFileInput("cached_json");
 
 				BufferedReader reader;
 
 				reader = new BufferedReader(new InputStreamReader(instream,
 						"iso-8859-1"), 8);
-				result = reader.readLine();
-			} catch (Exception e1) {
+				StringBuilder sb = new StringBuilder();
+				String line;
+				while ((line = reader.readLine()) != null) {
+					sb.append(line + "\n");
+				}
+				instream.close();
+				result = sb.toString();
+	
+			
+			} catch (Exception e2) {
 				// TODO Auto-generated catch block
-				e1.toString();
+				e2.toString();
 			}
 		}
 		try {
@@ -115,8 +122,8 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 						json_data.getString("UUID"), json_data.getInt("major"),
 						json_data.getInt("minor")));
 			}
-		} catch (Exception e) {
-
+		} catch (Exception e3) {
+			logToDisplay(e3.toString());
 		}
 
 		// Toast.makeText(getApplicationContext(),"There are " +
