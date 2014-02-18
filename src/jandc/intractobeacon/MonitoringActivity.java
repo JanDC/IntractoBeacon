@@ -22,6 +22,8 @@ import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.params.BasicHttpParams;
+import org.apache.http.params.HttpParams;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -41,13 +43,17 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 		verifyBluetooth();
 		iBeaconManager.bind(this);
 
-		regions = fetchRegions();
-		/*
-		 * regions.add(new Region("intracto.entrance",
-		 * "e2 c5 6d b5 df fb 48 d2 b0 60 d0 f5 a7 10 96 e0", null, null));
-		 * regions.add(new Region("intracto.thebox",
-		 * "e2 c5 6d b5 df fb 48 d2 b0 60 d0 f5 a7 10 96 e1", null, null));
-		 */
+		new Thread(new Runnable() {
+			public void run() {
+				regions = fetchRegions();
+			}
+		}).start();
+
+		// regions.add(new
+		// Region("intracto.entrance","e2 c5 6d b5 df fb 48 d2 b0 60 d0 f5 a7 10 96 e0",
+		// null, null));
+		// regions.add(new Region("intracto.thebox",
+		// "e2 c5 6d b5 df fb 48 d2 b0 60 d0 f5 a7 10 96 e1", null, null));
 
 	}
 
@@ -58,7 +64,9 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 
 		// http post
 		try {
-			HttpClient httpclient = new DefaultHttpClient();
+			HttpParams httpparams = new BasicHttpParams();
+			HttpClient httpclient = new DefaultHttpClient(httpparams);
+
 			HttpPost httppost = new HttpPost("http://192.168.1.100/index.php");
 			HttpResponse response = httpclient.execute(httppost);
 
@@ -75,9 +83,29 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 				sb.append(line + "\n");
 			}
 			is.close();
-
 			result = sb.toString();
+			OutputStreamWriter os = new OutputStreamWriter(openFileOutput(
+					"cached_json", 0));
 
+			os.write(result);
+			os.close();
+
+		} catch (Exception e) {
+			try {
+				logToDisplay(e.toString());
+				InputStream instream = openFileInput("cached_json");
+
+				BufferedReader reader;
+
+				reader = new BufferedReader(new InputStreamReader(instream,
+						"iso-8859-1"), 8);
+				result = reader.readLine();
+			} catch (Exception e1) {
+				// TODO Auto-generated catch block
+				e1.toString();
+			}
+		}
+		try {
 			// parse json data
 			JSONArray jArray = new JSONArray(result);
 			for (int i = 0; i < jArray.length(); i++) {
@@ -88,7 +116,7 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 						json_data.getInt("minor")));
 			}
 		} catch (Exception e) {
-			logToDisplay(e.getMessage());
+
 		}
 
 		// Toast.makeText(getApplicationContext(),"There are " +
@@ -126,13 +154,11 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 			builder.setMessage("Sorry, this device does not support Bluetooth LE.");
 			builder.setPositiveButton(android.R.string.ok, null);
 			builder.setOnDismissListener(new DialogInterface.OnDismissListener() {
-
 				@Override
 				public void onDismiss(DialogInterface dialog) {
 					finish();
 					System.exit(0);
 				}
-
 			});
 			builder.show();
 
