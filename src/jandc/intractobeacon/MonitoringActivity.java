@@ -1,37 +1,36 @@
 package jandc.intractobeacon;
 
-import java.io.*;
-import java.lang.reflect.Constructor;
-import java.util.*;
+import java.lang.Thread.State;
+import java.util.ArrayList;
+import java.util.List;
 
-import com.radiusnetworks.ibeacon.*;
-
-import android.R.string;
-import android.os.*;
-import android.app.*;
-import android.content.*;
-import android.util.*;
-import android.view.*;
-import android.widget.*;
-
-import java.sql.*;
-
-import org.apache.http.*;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.params.BasicHttpParams;
-import org.apache.http.params.HttpParams;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.R.string;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.Application;
+import android.content.DialogInterface;
+import android.os.Bundle;
+import android.os.Looper;
+import android.os.RemoteException;
+import android.util.Log;
+import android.widget.EditText;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.radiusnetworks.ibeacon.IBeaconConsumer;
+import com.radiusnetworks.ibeacon.IBeaconManager;
+import com.radiusnetworks.ibeacon.MonitorNotifier;
+import com.radiusnetworks.ibeacon.Region;
+
 public class MonitoringActivity extends Activity implements IBeaconConsumer {
 
 	private List<Region> regions = new ArrayList<Region>();
-
+	private List<RegionMessage> messages = new ArrayList<RegionMessage>();
+	private Thread fetchThread;
 	protected static final String TAG = "MonitoringActivity";
 
 	@Override
@@ -43,101 +42,79 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 		verifyBluetooth();
 		iBeaconManager.bind(this);
 
-		new Thread(new Runnable() {
+		fetchThread = new Thread(new Runnable() {
 			public void run() {
-				regions = fetchRegions();
+				try {
+					messages = fetchMessages();
+					regions = fetchRegions();
+					try {
+						for (Region region_line : regions) {
+							iBeaconManager
+									.startMonitoringBeaconsInRegion(region_line);
+						}
+					} catch (RemoteException e) {
+					}
+				} catch (Exception e) {
+					logToEditText(e.toString(), R.id.monitoringText);
+					e.printStackTrace();
+				}
 			}
-		}).start();
+		});
 
-		// regions.add(new
-		// Region("intracto.entrance","e2 c5 6d b5 df fb 48 d2 b0 60 d0 f5 a7 10 96 e0",
-		// null, null));
-		// regions.add(new Region("intracto.thebox",
-		// "e2 c5 6d b5 df fb 48 d2 b0 60 d0 f5 a7 10 96 e1", null, null));
+		fetchThread.start();
 
 	}
 
-	private List<Region> fetchRegions() {
-		List<Region> fetchedRegions = new ArrayList<Region>();
+	private List<RegionMessage> fetchMessages() {
+		List<RegionMessage> fetchedMessages = new ArrayList<RegionMessage>();
 
-		String result = "";
-
-		// http post
+		RegionRepository repo = new RegionRepository(
+				this.getApplicationContext());
+		String result = repo.getRemoteJSON(
+				"http://lachesis.eu/index.php/messages", "message_cache");
 		try {
-			HttpParams httpparams = new BasicHttpParams();
-			HttpClient httpclient = new DefaultHttpClient(httpparams);
-
-			HttpPost httppost = new HttpPost("http://192.168.1.100/index.php");
-			HttpResponse response = httpclient.execute(httppost);
-
-			HttpEntity entity = response.getEntity();
-			InputStream is = entity.getContent();
-
-			// convert response to string
-			BufferedReader reader = new BufferedReader(new InputStreamReader(
-					is, "iso-8859-1"), 8);
-			StringBuilder sb = new StringBuilder();
-			String line = null;
-
-			while ((line = reader.readLine()) != null) {
-				sb.append(line + "\n");
-			}
-			is.close();
-			result = sb.toString();
-			OutputStreamWriter os = new OutputStreamWriter(openFileOutput(
-					"cached_json", 0));
-
-			os.write(result);
-			os.close();
-
-		} catch (Exception e1) {
-			try {
-				InputStream instream = openFileInput("cached_json");
-
-				BufferedReader reader;
-
-				reader = new BufferedReader(new InputStreamReader(instream,
-						"iso-8859-1"), 8);
-				StringBuilder sb = new StringBuilder();
-				String line;
-				while ((line = reader.readLine()) != null) {
-					sb.append(line + "\n");
-				}
-				instream.close();
-				result = sb.toString();
-	
-			
-			} catch (Exception e2) {
-				// TODO Auto-generated catch block
-				e2.toString();
-			}
-		}
-		try {
-			// parse json data
 			JSONArray jArray = new JSONArray(result);
 			for (int i = 0; i < jArray.length(); i++) {
 				JSONObject json_data = jArray.getJSONObject(i);
-
-				fetchedRegions.add(new Region(json_data.getString("uniqueId"),
-						json_data.getString("UUID"), json_data.getInt("major"),
-						json_data.getInt("minor")));
+				RegionMessage message = new RegionMessage(
+						json_data.getString("uniqueId"),
+						json_data.getString("message"));
+				fetchedMessages.add(message);
 			}
-		} catch (Exception e3) {
-			logToDisplay(e3.toString());
+
+		} catch (Exception e) {
+			logToEditText(e.toString(), R.id.monitoringText);
 		}
 
-		// Toast.makeText(getApplicationContext(),"There are " +
-		// fetchedRegions.size() + " of them",Toast.LENGTH_LONG).show();
+		return fetchedMessages;
+	}
+
+	private List<Region> fetchRegions() throws JSONException {
+		List<Region> fetchedRegions = new ArrayList<Region>();
+		RegionRepository repo = new RegionRepository(
+				this.getApplicationContext());
+		String result = repo.getRemoteJSON(
+				"http://lachesis.eu/index.php/regions", "region_cache");
+		try {
+			JSONArray jArray = new JSONArray(result);
+			for (int i = 0; i < jArray.length(); i++) {
+				JSONObject json_data = jArray.getJSONObject(i);
+				Region region = new Region(json_data.getString("uniqueId"),
+						json_data.getString("UUID"), json_data.getInt("major"),
+						json_data.getInt("minor"));
+				fetchedRegions.add(region);
+			}
+
+		} catch (Exception e) {
+			logToEditText(e.toString(), R.id.monitoringText);
+		}
+		logToTextView(fetchedRegions.size() + " regions loaded",
+				R.id.monitoringTitle);
+
 		return fetchedRegions;
 	}
 
-	public void onRangingClicked(View view) {
-		Intent myIntent = new Intent(this, RangingActivity.class);
-		this.startActivity(myIntent);
-	}
-
 	private void verifyBluetooth() {
-
 		try {
 			if (!IBeaconManager.getInstanceForApplication(this)
 					.checkAvailability()) {
@@ -168,9 +145,7 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 				}
 			});
 			builder.show();
-
 		}
-
 	}
 
 	private IBeaconManager iBeaconManager = IBeaconManager
@@ -180,11 +155,6 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 	protected void onDestroy() {
 		super.onDestroy();
 		iBeaconManager.unBind(this);
-	}
-
-	public void onBackgroundClicked(View view) {
-		Intent myIntent = new Intent(this, BackgroundActivity.class);
-		this.startActivity(myIntent);
 	}
 
 	@Override
@@ -201,12 +171,22 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 			iBeaconManager.setBackgroundMode(this, false);
 	}
 
-	private void logToDisplay(final String line) {
+	private void logToEditText(final String line, final int textid) {
 		runOnUiThread(new Runnable() {
 			public void run() {
 				EditText editText = (EditText) MonitoringActivity.this
-						.findViewById(R.id.monitoringText);
+						.findViewById(textid);
 				editText.setText(line);
+			}
+		});
+	}
+
+	private void logToTextView(final String line, final int viewid) {
+		runOnUiThread(new Runnable() {
+			public void run() {
+				TextView textView = (TextView) MonitoringActivity.this
+						.findViewById(viewid);
+				textView.setText(line);
 			}
 		});
 	}
@@ -220,21 +200,17 @@ public class MonitoringActivity extends Activity implements IBeaconConsumer {
 			public void didEnterRegion(Region region) {
 				String text = "Just entered :";
 				text += region.getUniqueId();
-
-				if (region.getUniqueId()
-						.equals(new String("intracto.entrance"))) {
-					text = " Welcome to intracto digital agency.";
-				} else if (region.getUniqueId().equals(
-						new String("intracto.thebox"))) {
-					text = " Welcome to team 'The Box'.";
+				for (RegionMessage message : messages) {
+					if (message.getUID().equals(region.getUniqueId())) {
+						text = message.getMessage();
+					}
 				}
-
-				logToDisplay(text);
+				logToEditText(text, R.id.monitoringText);
 			}
 
 			@Override
 			public void didExitRegion(Region region) {
-				logToDisplay("");
+				logToEditText("", R.id.monitoringText);
 			}
 
 			@Override
